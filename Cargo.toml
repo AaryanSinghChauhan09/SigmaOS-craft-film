@@ -1,0 +1,9 @@
+[package]
+name = "sigmaos_craft_film"
+version = "0.1.0"
+edition = "2021"
+description = "Video editing integration for SigmaOS — timeline, clip management, transitions, and render pipeline"
+
+[lib]
+name = "sigmaos_craft_film"
+path = "src/lib.rs"

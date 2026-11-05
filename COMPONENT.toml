@@ -1,0 +1,16 @@
+[component]
+name = "SigmaOS-craft-film"
+tier = 5
+stability = "scaffold"
+language = "rust"
+description = "Video editing integration for SigmaOS — timeline, clip management, transitions, and render pipeline"
+upstream = ["https://github.com/KDE/kdenlive"]
+
+[contract]
+provides = ["video-timeline", "clip-management"]
+depends_on = []
+
+[maturity]
+status = "Scaffold"
+test_evidence = "Compiles"
+next_milestone = "Verification test suite"
