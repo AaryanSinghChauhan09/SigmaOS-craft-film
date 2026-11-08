@@ -2,7 +2,8 @@
 name = "sigmaos_craft_film"
 version = "0.1.0"
 edition = "2021"
-description = "Video editing integration for SigmaOS — timeline, clip management, transitions, and render pipeline"
+license = "MIT"
+description = "SigmaOS craft-film component inspired by Linux Mint / Omarchy / Arch Linux."
 
 [lib]
 name = "sigmaos_craft_film"
