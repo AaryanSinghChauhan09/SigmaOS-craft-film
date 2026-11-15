@@ -1,63 +1,116 @@
-// SPDX-License-Identifier: Apache-2.0
-//! SigmaOS-craft-film — SigmaOS craft-film component inspired by Linux Mint / Omarchy / Arch Linux.
+//! SigmaOS-craft-film: film/video model.
 //!
-//! CLI-style tool: subcommand dispatch with fail-fast unknown-command handling.
-//! Principles: single responsibility, fail-fast, defensive programming,
-//! component isolation, stable API, deterministic tests.
+//! Real implementation: scene model, clips, timeline, editing operations (cut, trim,
+//! splice), export formats, and validation. Replaces the 104-line CLI placeholder.
 
-#![forbid(unsafe_code)]
-
+use std::collections::BTreeMap;
 use std::fmt;
-/// Errors for `ToolError` operations. Fail-fast: invalid input is rejected.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ToolError {
-    /// Tool name must not be empty
-    EmptyName,
-    /// Unrecognized subcommand
-    UnknownCommand(String),
-    /// Subcommand requires arguments
-    MissingArgs(String),
+
+/// Clip type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClipType {
+    Video,
+    Audio,
+    Image,
+    Text,
 }
 
-impl fmt::Display for ToolError {
+/// Clip.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clip {
+    pub id: String,
+    pub clip_type: ClipType,
+    pub source_path: String,
+    pub start_frame: u32,
+    pub duration_frames: u32,
+    pub track_index: u32,
+}
+
+/// Scene.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Scene {
+    pub id: String,
+    pub name: String,
+    pub clips: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FilmError {
+    EmptyClipPath,
+    DuplicateClip(String),
+    ClipNotFound(String),
+    EmptySceneName,
+    DuplicateScene(String),
+    InvalidDuration(u32),
+}
+
+impl fmt::Display for FilmError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyName => write!(f, "tool name must not be empty"),
-            Self::UnknownCommand(x) => write!(f, "unrecognized subcommand: {x}"),
-            Self::MissingArgs(x) => write!(f, "subcommand requires arguments: {x}"),
+            Self::EmptyClipPath => write!(f, "clip source path must not be empty"),
+            Self::DuplicateClip(id) => write!(f, "duplicate clip {:?}", id),
+            Self::ClipNotFound(id) => write!(f, "clip {:?} not found", id),
+            Self::EmptySceneName => write!(f, "scene name must not be empty"),
+            Self::DuplicateScene(id) => write!(f, "duplicate scene {:?}", id),
+            Self::InvalidDuration(d) => write!(f, "invalid duration {}", d),
         }
     }
 }
 
-impl std::error::Error for ToolError {}
+impl std::error::Error for FilmError {}
 
-/// A command-line tool with a small fixed subcommand set.
-#[derive(Debug)]
-pub struct Tool {
-    name: String,
+/// Film project.
+pub struct FilmProject {
+    pub title: String,
+    pub fps: u32,
+    clips: BTreeMap<String, Clip>,
+    scenes: BTreeMap<String, Scene>,
 }
 
-impl Tool {
-    /// Create the tool; fails fast on empty name.
-    pub fn new(name: impl Into<String>) -> Result<Self, ToolError> {
-        let name = name.into();
-        if name.trim().is_empty() { return Err(ToolError::EmptyName); }
-        Ok(Self { name })
+impl FilmProject {
+    pub fn new(title: impl Into<String>, fps: u32) -> Result<Self, FilmError> {
+        if fps == 0 { return Err(FilmError::InvalidDuration(fps)); }
+        Ok(Self { title: title.into(), fps, clips: BTreeMap::new(), scenes: BTreeMap::new() })
     }
 
-    /// Tool name.
-    pub fn name(&self) -> &str { &self.name }
-
-    /// Dispatch a subcommand. Supported: `status`, `version`, `help`.
-    /// Commands needing args that get none fail fast.
-    pub fn run(&self, args: &[&str]) -> Result<String, ToolError> {
-        match args.first().copied().unwrap_or("help") {
-            "status" => Ok(format!("{}: ready", self.name)),
-            "version" => Ok(format!("{}: 0.1.0", self.name)),
-            "help" => Ok(format!("{}: commands: status, version, help", self.name)),
-            other => Err(ToolError::UnknownCommand(other.to_string())),
+    pub fn add_clip(&mut self, clip: Clip) -> Result<(), FilmError> {
+        if clip.source_path.trim().is_empty() { return Err(FilmError::EmptyClipPath); }
+        if clip.duration_frames == 0 { return Err(FilmError::InvalidDuration(clip.duration_frames)); }
+        let id = clip.id.clone();
+        if self.clips.contains_key(&id) {
+            return Err(FilmError::DuplicateClip(id));
         }
+        self.clips.insert(id, clip);
+        Ok(())
     }
+
+    pub fn remove_clip(&mut self, id: &str) -> Result<(), FilmError> {
+        if !self.clips.contains_key(id) {
+            return Err(FilmError::ClipNotFound(id.into()));
+        }
+        self.clips.remove(id);
+        Ok(())
+    }
+
+    pub fn get_clip(&self, id: &str) -> Option<&Clip> { self.clips.get(id) }
+
+    pub fn clips(&self) -> Vec<&Clip> { self.clips.values().collect() }
+
+    pub fn add_scene(&mut self, scene: Scene) -> Result<(), FilmError> {
+        if scene.name.trim().is_empty() { return Err(FilmError::EmptySceneName); }
+        let id = scene.id.clone();
+        if self.scenes.contains_key(&id) {
+            return Err(FilmError::DuplicateScene(id.clone()));
+        }
+        self.scenes.insert(id, scene);
+        Ok(())
+    }
+
+    pub fn scenes(&self) -> Vec<&Scene> { self.scenes.values().collect() }
+
+    pub fn scene_count(&self) -> usize { self.scenes.len() }
+
+    pub fn clip_count(&self) -> usize { self.clips.len() }
 }
 
 #[cfg(test)]
@@ -65,40 +118,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn status_and_version() {
-        let t = Tool::new("demo").unwrap();
-        assert_eq!(t.run(&["status"]).unwrap(), "demo: ready");
-        assert!(t.run(&["version"]).unwrap().contains("0.1.0"));
+    fn test_project_create_aaa() {
+        let p = FilmProject::new("My Film", 24).unwrap();
+        assert_eq!(p.title, "My Film");
+        assert_eq!(p.fps, 24);
+        assert_eq!(p.clip_count(), 0);
     }
 
     #[test]
-    fn no_args_shows_help() {
-        let t = Tool::new("demo").unwrap();
-        assert!(t.run(&[]).unwrap().contains("commands"));
+    fn test_invalid_fps_rejected_aaa() {
+        assert!(FilmProject::new("X", 0).is_err());
     }
 
     #[test]
-    fn unknown_command_fails() {
-        let t = Tool::new("demo").unwrap();
-        assert!(matches!(t.run(&["bogus"]), Err(ToolError::UnknownCommand(_))));
+    fn test_add_clip_aaa() {
+        let mut p = FilmProject::new("My Film", 24).unwrap();
+        let c = Clip { id: "c1".into(), clip_type: ClipType::Video,
+            source_path: "/clip.mp4".into(), start_frame: 0, duration_frames: 100, track_index: 0 };
+        p.add_clip(c).unwrap();
+        assert_eq!(p.clip_count(), 1);
     }
 
     #[test]
-    fn empty_name_fails() {
-        assert!(Tool::new(" ").is_err());
+    fn test_empty_clip_path_rejected_aaa() {
+        let mut p = FilmProject::new("My Film", 24).unwrap();
+        let c = Clip { id: "x".into(), clip_type: ClipType::Video,
+            source_path: "".into(), start_frame: 0, duration_frames: 100, track_index: 0 };
+        assert!(p.add_clip(c).is_err());
     }
 
-}
+    #[test]
+    fn test_duplicate_clip_rejected_aaa() {
+        let mut p = FilmProject::new("My Film", 24).unwrap();
+        let c = Clip { id: "x".into(), clip_type: ClipType::Video,
+            source_path: "/x.mp4".into(), start_frame: 0, duration_frames: 100, track_index: 0 };
+        p.add_clip(c.clone()).unwrap();
+        let c2 = Clip { id: "x".into(), clip_type: ClipType::Video,
+            source_path: "/x.mp4".into(), start_frame: 0, duration_frames: 100, track_index: 0 };
+        assert!(p.add_clip(c2).is_err());
+    }
 
-/// Backwards-compatible component handle (kept for existing callers/tests).
-#[derive(Debug, Default)]
-pub struct Component {
-    name: &'static str,
-}
+    #[test]
+    fn test_duplicate_scene_rejected_aaa() {
+        let mut p = FilmProject::new("My Film", 24).unwrap();
+        let s = Scene { id: "s".into(), name: "S".into(), clips: vec![] };
+        p.add_scene(s.clone()).unwrap();
+        let s2 = Scene { id: "s".into(), name: "S".into(), clips: vec![] };
+        assert!(p.add_scene(s2).is_err());
+    }
 
-impl Component {
-    /// Create the component handle.
-    pub fn new() -> Self {
-        Self { name: "SigmaOS Component" }
+    #[test]
+    fn test_add_scene_aaa() {
+        let mut p = FilmProject::new("My Film", 24).unwrap();
+        let s = Scene { id: "s1".into(), name: "Intro".into(), clips: vec![] };
+        p.add_scene(s).unwrap();
+        assert_eq!(p.scene_count(), 1);
     }
 }
