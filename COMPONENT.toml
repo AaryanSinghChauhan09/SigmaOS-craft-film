@@ -3,7 +3,7 @@ name = "SigmaOS-craft-film"
 tier = 5
 stability = "scaffold"
 language = "rust"
-description = "Video editing integration for SigmaOS — timeline, clip management, transitions, and render pipeline"
+description = "No GitHub description is set; component scope remains unclassified."
 upstream = ["https://github.com/KDE/kdenlive"]
 
 [contract]
