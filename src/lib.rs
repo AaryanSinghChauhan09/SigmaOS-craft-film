@@ -3,6 +3,9 @@
 //! Real implementation: scene model, clips, timeline, editing operations (cut, trim,
 //! splice), export formats, and validation. Replaces the 104-line CLI placeholder.
 
+/// Film and video editing module.
+pub mod sigmafilm;
+
 use std::collections::BTreeMap;
 use std::fmt;
 
